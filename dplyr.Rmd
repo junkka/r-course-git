@@ -1,0 +1,321 @@
+---
+title: dplyr tutorial
+author: Johan Junkka
+date: 2015-06-03
+css: style.css
+output:
+  html_document:
+    toc: true
+---
+
+# Introduction
+
+(from dplyr vignette)
+
+When working with data you must:
+
+* Figure out what you want to do.
+* Precisely describe what you want in the form of a computer program.
+* Execute the code.
+
+The dplyr package makes each of these steps as fast and easy as possible by:
+
+* Elucidating the most common data manipulation operations, so that your options are helpfully constrained when thinking about how to tackle a problem.
+* Providing simple functions that correspond to the most common data manipulation verbs, so that you can easily translate your thoughts into code.
+
+# Data: person & obs
+
+We have two datasets
+
+| -----------: | :-------------------     |
+| person       | Static information       |
+| obs          | Time varying information |
+
+```{r}
+library(dplyr)
+library(skel15)
+
+person <- tbl_df(person)
+person
+```
+
+## Filter
+
+Lets select all women born in 1800 or 1850 
+
+```{r}
+filter(person, KON == 2, FODDAT %/% 10000 == 1800 | FODDAT %/% 10000 == 1850)
+```
+
+## Arrange rows
+
+Arrange by birthdate
+
+```{r}
+arrange(person, FODDAT)
+```
+
+Arrange in descending order
+
+```{r}
+arrange(person, desc(FODDAT))
+```
+
+## Selecting variables
+
+Lets use a subset of the data
+
+```{r}
+select(person, ID, KON, FODDAT, DODDAT)
+```
+
+However, we might be interested in only the first 6 variables and FODDAT.
+
+```{r}
+select(person, ID:PARITET_G, FODDAT)
+```
+
+## Srtinging commands together
+
+Using the obersvation data `obs` we can check the number of unique individuals. 
+
+```{r}
+data(obs)
+
+obs <- tbl_df(obs)
+
+distinct(select(obs, id)) 
+```
+
+or stringing them together in one operation using the "pipes" operator `%>%`
+
+```{r}
+obs %>% select(id) %>% distinct()
+```
+
+Now we can create more complex calculations
+
+# Add a new column 
+
+We might want to know if a person is observable until death
+
+```{r}
+person %>% 
+  select(ID, DODDAT, UTDATMIN) %>% 
+  mutate(UTDATMIN - DODDAT)
+```
+
+# Make event history data
+
+1. Get all married women
+
+```{r}
+women <- obs %>% 
+  select(id, sex, civst, enter) %>% 
+  filter(sex == "woman", civst == "married") %>% 
+  group_by(id) %>%
+  arrange(enter) %>% 
+  filter(row_number() == 1) %>% 
+  select(id, marriage_age = enter)
+```
+
+2. Get date of dissolution
+
+```{r}
+women_diss <- obs %>% 
+  select(id, sex, civst, enter) %>% 
+  filter(sex == "woman", civst == "prev.married") %>% 
+  group_by(id) %>%
+  arrange(enter) %>% 
+  filter(row_number() == 1) %>% 
+  select(id, diss_age = enter)
+```
+
+3. Combine marriage age and age at dissolution
+
+```{r}
+women <- left_join(women, women_diss, by = "id")
+```
+
+Not all married women had a dissolution date as some observations ended before the marriage ended. 
+
+4. Thus, we need to add age at last observation from the `person` file.
+
+```{r}
+women_last_obs <- person %>% 
+  select(ID, FODDAT, UTDATMIN) %>% # id, birth date, last observation date
+  mutate(last_age  = tillTid(UTDATMIN) - tillTid(FODDAT)) %>% 
+  select(
+    id = ID, 
+    birth_date = FODDAT, 
+    last_age
+  )
+```
+
+5. Add to the `women` data
+
+```{r}
+women <- left_join(women, women_last_obs, by = "id")
+```
+
+6. Now, we can create last observation date
+
+```{r}
+women <- women %>% 
+  mutate(end_age = min(c(50, diss_age, last_age), na.rm = TRUE)) %>% 
+  select(id, start_age = marriage_age, end_age)
+```
+
+7. Add birth date
+
+```{r}
+max_obs_date <- max(person$FODDAT)
+
+years_diff <- function(a, b){
+  as.numeric(difftime(as.Date(as.character(a), "%Y%m%d"), as.Date(as.character(b), "%Y%m%d")))/365.25
+}
+
+women2 <- person %>%
+  select(ID, FODDAT) %>% 
+  left_join(women, ., by = c("id" = "ID")) %>% 
+  rename(birthdate = FODDAT) %>%
+  mutate(
+    age_at_end = years_diff(max_obs_date, birthdate)
+  ) %>% 
+  ungroup() %>% 
+  mutate(end_age = ifelse(end_age < age_at_end, end_age, age_at_end)) %>% 
+  select(-age_at_end) %>% 
+  filter(end_age > start_age)
+
+```
+
+8. As we are interested in fertility we will need observations for each born child within the obervation span. Start with getting all children, their birth dates and their mothers id.
+
+```{r}
+children <- tbl_df(person) %>% 
+  select(ID, FODDAT, MID, KON) %>% 
+  filter(MID %in% women$id) %>% 
+  select(id = MID, date = FODDAT, ch_id = ID, sex = KON)
+children
+```
+
+9. Add info on the mothers from `women` file
+
+```{r}
+children <- left_join(children, women2, by = "id")
+children
+```
+
+```{r}
+births <- arrange(children, id, date)
+births
+```
+
+10. Make enter
+
+```{r}
+births <- mutate(births, enter = years_diff(date, birthdate))
+```
+
+
+11. Remove all births that occured after end age
+
+```{r}
+births <- filter(births, enter < end_age)
+```
+
+12. Add n gender
+
+```{r}
+births = mutate(births,
+    girls = ifelse(sex == 1, 1, 0),
+    boys = ifelse(sex == 2, 1, 0)
+  )
+```
+
+13. Sum up and add parity
+
+```{r}
+births <- group_by(births, id) %>% 
+  mutate(girls = cumsum(girls), boys = cumsum(boys), parity = girls + boys)
+```
+
+13. Add exit date and event
+
+```{r}
+births <- group_by(births, id) %>% 
+  mutate(
+    exit = lead(enter), 
+    event = ifelse(is.na(exit), FALSE, TRUE),
+    exit = ifelse(is.na(exit), end_age, exit))
+```
+
+# Lets check if 
+
+```{r}
+births <- ungroup(births) %>% 
+  mutate(
+    cohort = (birthdate %/% 100000)*10, 
+    age_group = factor((enter %/% 5)*5)
+  )
+
+```
+
+
+```{r}
+births2 <- group_by(births, id) %>% 
+  mutate(exit = exit - min(enter), enter = enter - min(enter)) %>% 
+  ungroup() %>% 
+  filter(enter < exit)
+```
+
+
+```{r, cache = T}
+fit <- coxph(Surv(enter, exit, event) ~ sex + cohort + age_group + strata(parity), data = births2)
+```
+
+# Getting results from a regression model
+
+Using the `broom` package
+
+```{r}
+
+library(broom)
+library(knitr)
+
+fit_tbl <- tidy(fit, expo = TRUE)
+
+kable(fit_tbl)
+
+glance(fit)
+```
+
+Combining results from regressions
+
+```{r}
+bladder1 <- bladder[bladder$enum < 5, ] 
+fit1 <- coxph(Surv(stop, event) ~ rx + size + number, filter(bladder1, enum == 1))
+fit2 <- coxph(Surv(stop, event) ~ rx + size + number, filter(bladder1, enum == 2))
+
+(tbl_fit1 <- tidy(fit1, expo = TRUE))
+(tbl_fit1 <- tidy(fit1, expo = TRUE))
+```
+
+Compare these models
+
+```{r}
+(tbl_fit1 <- tbl_fit1 %>% select(term, e1 = estimate, p1 = p.value))
+(tbl_fit2 <- tbl_fit2 %>% select(term, e2 = estimate, p2 = p.value))
+
+res <- left_join(tbl_fit1, tbl_fit2)
+
+kable(res, digits = 3)
+```
+
+# More help
+
+* Look at vignettes
+* Learn to use help. 
+    * What is the help file to plot a coxreg? = `?plot.coxreg`
+* **Ask** questions on [Stackoverflow](http://stackoverflow.com/) & [Cross Validated](http://stats.stackexchange.com/)
+* Look at other peoples code, on [GitHub](http://github.com) or replicable articles on [Demographic Research](http://demographic-research.org/volumes/replicable_articles.htm)

@@ -1,5 +1,5 @@
 ---
-meta-title: "Git & reproducable research"
+meta-title: "Git & reproducible research"
 meta-author: "Johan Junkka"
 meta-date: "May 25, 2015"
 output: 
@@ -8,9 +8,9 @@ output:
     center: true
 ---
 
-## Git & reproducable research
+## Git & reproducible research
 
-http://johanjunkka.com/r-cource-git
+http://johanjunkka.com/r-course-git
 
 #
 

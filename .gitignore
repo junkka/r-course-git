@@ -3,3 +3,5 @@
 .RData
 *.html
 *.Rproj
+*_cache/
+*_files/

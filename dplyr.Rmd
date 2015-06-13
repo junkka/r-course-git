@@ -1,5 +1,5 @@
 ---
-title: dplyr tutorial
+title: "dplyr & Event history data - tutorial"
 author: Johan Junkka
 date: 2015-06-03
 css: style.css
@@ -10,7 +10,7 @@ output:
 
 # Introduction
 
-(from dplyr vignette)
+(from [dplyr vignette](http://cran.rstudio.com/web/packages/dplyr/vignettes/introduction.html))
 
 When working with data you must:
 
@@ -75,9 +75,9 @@ However, we might be interested in only the first 6 variables and FODDAT.
 select(person, ID:PARITET_G, FODDAT)
 ```
 
-## Srtinging commands together
+## Stringing commands together
 
-Using the obersvation data `obs` we can check the number of unique individuals. 
+Using the observation data `obs` we can check the number of unique individuals. 
 
 ```{r}
 data(obs)
@@ -102,7 +102,7 @@ We might want to know if a person is observable until death
 ```{r}
 person %>% 
   select(ID, DODDAT, UTDATMIN) %>% 
-  mutate(UTDATMIN - DODDAT)
+  mutate(new = UTDATMIN - DODDAT)
 ```
 
 # Make event history data
@@ -189,7 +189,7 @@ women2 <- person %>%
 
 ```
 
-8. As we are interested in fertility we will need observations for each born child within the obervation span. Start with getting all children, their birth dates and their mothers id.
+8. As we are interested in fertility we will need observations for each born child within the observation span. Start with getting all children, their birth dates and their mothers id.
 
 ```{r}
 children <- tbl_df(person) %>% 
@@ -298,7 +298,7 @@ fit1 <- coxph(Surv(stop, event) ~ rx + size + number, filter(bladder1, enum == 1
 fit2 <- coxph(Surv(stop, event) ~ rx + size + number, filter(bladder1, enum == 2))
 
 (tbl_fit1 <- tidy(fit1, expo = TRUE))
-(tbl_fit1 <- tidy(fit1, expo = TRUE))
+(tbl_fit2 <- tidy(fit2, expo = TRUE))
 ```
 
 Compare these models
@@ -317,5 +317,5 @@ kable(res, digits = 3)
 * Look at vignettes
 * Learn to use help. 
     * What is the help file to plot a coxreg? = `?plot.coxreg`
-* **Ask** questions on [Stackoverflow](http://stackoverflow.com/) & [Cross Validated](http://stats.stackexchange.com/)
-* Look at other peoples code, on [GitHub](http://github.com) or replicable articles on [Demographic Research](http://demographic-research.org/volumes/replicable_articles.htm)
+* Not only search for questions, but also **ask** questions on [Stackoverflow](http://stackoverflow.com/) & [Cross Validated](http://stats.stackexchange.com/)
+* Look at other peoples code, on [GitHub](https://github.com/ropensci) or replicable articles on [Demographic Research](http://demographic-research.org/volumes/replicable_articles.htm)

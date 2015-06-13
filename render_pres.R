@@ -3,5 +3,5 @@ render_pres <- function(){
   library(rmarkdown)
   render("index.Rmd", output_dir="output")
   render("dplyr.Rmd", output_dir="output")
-  file.copy('img', "output", recursive = TRUE)
+  # file.copy('img', "output", recursive = TRUE)
 }
